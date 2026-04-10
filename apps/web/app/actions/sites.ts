@@ -1,6 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
+import { maxSitesPerMapForPlan } from '@/lib/plan';
 
 type MapCtx =
   | { error: string }
@@ -39,6 +40,17 @@ export async function addSite(mapId: string, name: string) {
   if ('error' in r) {
     return r;
   }
+  const { data: resort } = await r.supabase.from('resorts').select('plan').eq('id', r.resortId).single();
+  const cap = maxSitesPerMapForPlan(resort?.plan);
+  if (Number.isFinite(cap)) {
+    const { count, error: cErr } = await r.supabase
+      .from('sites')
+      .select('*', { count: 'exact', head: true })
+      .eq('map_id', mapId);
+    if (!cErr && count !== null && count >= cap) {
+      return { error: `Your plan allows up to ${cap} sites per map. Upgrade in Settings.` };
+    }
+  }
   const { data, error } = await r.supabase
     .from('sites')
     .insert({
@@ -65,6 +77,8 @@ export async function updateSite(
     rate_night: number | null;
     max_length_ft: number | null;
     description: string | null;
+    photo_url: string | null;
+    display_code: string | null;
     ownerrez_property_id: string | null;
     pos_x: number;
     pos_y: number;

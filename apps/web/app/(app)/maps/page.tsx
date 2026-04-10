@@ -23,7 +23,20 @@ export default async function MapsPage() {
     .eq('resort_id', resort.id)
     .order('created_at', { ascending: false });
 
+  const { data: sites } = await supabase.from('sites').select('map_id').eq('resort_id', resort.id);
+  const siteCounts: Record<string, number> = {};
+  for (const s of sites ?? []) {
+    if (s.map_id) {
+      siteCounts[s.map_id] = (siteCounts[s.map_id] ?? 0) + 1;
+    }
+  }
+
   return (
-    <MapsClient resortId={resort.id} initialMaps={maps ?? []} plan={resort.plan ?? 'starter'} />
+    <MapsClient
+      resortId={resort.id}
+      initialMaps={maps ?? []}
+      siteCounts={siteCounts}
+      plan={resort.plan ?? 'starter'}
+    />
   );
 }

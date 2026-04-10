@@ -50,7 +50,10 @@ export async function updateSession(request: NextRequest) {
     '/loyalty',
     '/editor',
   ];
-  const isProtected = protectedPrefixes.some((p) => path === p || path.startsWith(`${p}/`));
+  const isPublicEmbedData = /^\/embed\/[^/]+\/[0-9a-f-]{36}$/i.test(path);
+  const isProtected =
+    !isPublicEmbedData &&
+    protectedPrefixes.some((p) => path === p || path.startsWith(`${p}/`));
 
   if (!user && isProtected) {
     const u = request.nextUrl.clone();
@@ -68,6 +71,12 @@ export async function updateSession(request: NextRequest) {
     const u = request.nextUrl.clone();
     u.pathname = '/overview';
     return NextResponse.redirect(u);
+  }
+
+  const isPublicMarketing = path === '/terms' || path === '/privacy' || path === '/join';
+
+  if (!user && isPublicMarketing) {
+    return supabaseResponse;
   }
 
   if (user && (path === '/' || path === '/signup' || path === '/forgot-password')) {

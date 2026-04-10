@@ -12,7 +12,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
     redirect('/');
   }
 
-  const meta = user.user_metadata as { onboarding_complete?: boolean } | undefined;
+  const meta = user.user_metadata as { onboarding_complete?: boolean; full_name?: string } | undefined;
   if (!meta?.onboarding_complete) {
     redirect('/onboarding');
   }
@@ -23,8 +23,29 @@ export default async function DashboardLayout({ children }: { children: React.Re
     .eq('owner_id', user.id)
     .maybeSingle();
 
+  let mapCount = 0;
+  let siteCount = 0;
+  if (resort?.id) {
+    const { count: mc } = await supabase
+      .from('maps')
+      .select('id', { count: 'exact', head: true })
+      .eq('resort_id', resort.id);
+    const { count: sc } = await supabase
+      .from('sites')
+      .select('id', { count: 'exact', head: true })
+      .eq('resort_id', resort.id);
+    mapCount = mc ?? 0;
+    siteCount = sc ?? 0;
+  }
+
   return (
-    <AppShell userEmail={user.email ?? ''} resort={resort}>
+    <AppShell
+      userEmail={user.email ?? ''}
+      userDisplayName={meta?.full_name}
+      resort={resort}
+      mapCount={mapCount}
+      siteCount={siteCount}
+    >
       {children}
     </AppShell>
   );

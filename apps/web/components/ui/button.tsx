@@ -1,9 +1,10 @@
 import type { ButtonHTMLAttributes } from 'react';
 
-type Variant = 'primary' | 'outline' | 'danger';
+type Variant = 'primary' | 'outline' | 'danger' | 'grove';
 
 const variantClass: Record<Variant, string> = {
   primary: 'btn btn-primary',
+  grove: 'btn btn-grove',
   outline: 'btn btn-outline',
   danger: 'btn btn-danger',
 };

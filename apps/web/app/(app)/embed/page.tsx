@@ -14,6 +14,19 @@ export default async function EmbedApiPage() {
     .select('id, slug')
     .eq('owner_id', user.id)
     .single();
+
+  const { data: orToken } = resort
+    ? await supabase.from('ownerrez_tokens').select('resort_id').eq('resort_id', resort.id).maybeSingle()
+    : { data: null };
+
+  const { data: sitesList } = resort
+    ? await supabase
+        .from('sites')
+        .select('id, name, ownerrez_property_id')
+        .eq('resort_id', resort.id)
+        .order('name', { ascending: true })
+    : { data: null };
+
   const { data: maps } = resort
     ? await supabase
         .from('maps')
@@ -40,7 +53,8 @@ export default async function EmbedApiPage() {
     <EmbedPageClient
       snippet={snippet}
       publicBase={appOrigin}
-      webhookStatus="Not configured"
+      ownerRezConnected={!!orToken}
+      siteMappings={sitesList ?? []}
     />
   );
 }

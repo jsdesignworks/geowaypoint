@@ -23,10 +23,11 @@ Use this when moving from local development to production. Adjust hostnames to y
 ## Stripe
 
 - Switch to **live** keys and webhook endpoint for production; map events to resort/plan updates per your billing actions.
+- Create catalog products per spec §18: Starter ($0), Growth ($59/mo), Pro ($99/mo), Resort ($149/mo), Enterprise ($249/mo).
 
 ## Resend, Sentry, Better Uptime
 
-- Verify sending domain in Resend; release health checks in Better Uptime for `/` and `/api/embed/...` smoke tests as needed.
+- Verify sending domain in Resend; point Better Uptime (or similar) at **`GET /api/health`**, **`GET /embed/[slug]/[mapId]`** (or `/api/embed/...`), and the marketing `/` route.
 - Sentry DSN for Next.js is already wired via `@sentry/nextjs` if env vars are set.
 
 ## OwnerRez
@@ -35,5 +36,5 @@ Use this when moving from local development to production. Adjust hostnames to y
 
 ## Legal & QA
 
-- Host privacy policy and terms on public routes or your marketing site; link from signup.
+- Replace placeholder copy on in-app **`/terms`** and **`/privacy`** with counsel-approved pages; signup links to Terms.
 - Run a short QA matrix: sign up → onboarding → map CRUD → editor → publish → embed snippet on a static HTML page → events in Analytics CSV.

@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
-import { Fraunces, Sora } from 'next/font/google';
+import { SpeedInsights } from '@vercel/speed-insights/next';
+import { Fraunces, JetBrains_Mono, Sora } from 'next/font/google';
 import './globals.css';
 
 const sora = Sora({
@@ -11,6 +12,12 @@ const sora = Sora({
 const fraunces = Fraunces({
   subsets: ['latin'],
   variable: '--font-serif',
+  display: 'swap',
+});
+
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
   display: 'swap',
 });
 
@@ -26,7 +33,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={`${sora.variable} ${fraunces.variable} antialiased`}>{children}</body>
+      <body className={`${sora.variable} ${fraunces.variable} ${jetbrainsMono.variable} antialiased`}>
+        {children}
+        <SpeedInsights />
+      </body>
     </html>
   );
 }

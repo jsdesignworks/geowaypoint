@@ -24,7 +24,11 @@ export default async function AnalyticsPage() {
     .order('created_at', { ascending: false })
     .limit(8000);
 
-  const { data: maps } = await supabase.from('maps').select('id, name').eq('resort_id', resort.id);
+  const { data: maps } = await supabase
+    .from('maps')
+    .select('id, name')
+    .eq('resort_id', resort.id)
+    .eq('is_published', true);
 
   return (
     <AnalyticsClient initialEvents={events ?? []} maps={maps ?? []} plan={resort.plan ?? 'starter'} />

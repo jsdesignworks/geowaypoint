@@ -1,8 +1,11 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { CORS_JSON_HEADERS } from '@/lib/http/cors';
+import { clientIp, rateLimitAllow } from '@/lib/http/rateLimit';
 
 export const dynamic = 'force-dynamic';
+
+const ALLOWED = new Set(['map_view', 'marker_click', 'book_click']);
 
 export async function OPTIONS() {
   return new NextResponse(null, { status: 204, headers: CORS_JSON_HEADERS });
@@ -11,23 +14,52 @@ export async function OPTIONS() {
 type Body = {
   slug?: string;
   mapId?: string;
+  resort_slug?: string;
+  map_id?: string;
   event?: string;
   siteId?: string | null;
+  site_id?: string | null;
 };
 
+function normalizeEvent(raw: string): string {
+  if (raw === 'site_click') {
+    return 'marker_click';
+  }
+  return raw;
+}
+
 export async function POST(request: Request) {
+  if (!rateLimitAllow(`events:${clientIp(request)}`)) {
+    return NextResponse.json({ error: 'rate_limited' }, { status: 429, headers: CORS_JSON_HEADERS });
+  }
+
   let body: Body;
   try {
     body = (await request.json()) as Body;
   } catch {
     return NextResponse.json({ error: 'invalid_json' }, { status: 400, headers: CORS_JSON_HEADERS });
   }
-  const slug = typeof body.slug === 'string' ? body.slug : '';
-  const mapId = typeof body.mapId === 'string' ? body.mapId : '';
-  const event = typeof body.event === 'string' ? body.event : '';
+
+  const slug = (typeof body.resort_slug === 'string' ? body.resort_slug : body.slug) ?? '';
+  const mapId = (typeof body.map_id === 'string' ? body.map_id : body.mapId) ?? '';
+  const eventRaw = typeof body.event === 'string' ? body.event : '';
+  const event = normalizeEvent(eventRaw);
+
   if (!slug || !mapId || !event) {
     return NextResponse.json({ error: 'bad_request' }, { status: 400, headers: CORS_JSON_HEADERS });
   }
+  if (!ALLOWED.has(event)) {
+    return NextResponse.json({ error: 'invalid_event' }, { status: 400, headers: CORS_JSON_HEADERS });
+  }
+
+  const siteIdRaw =
+    typeof body.site_id === 'string'
+      ? body.site_id
+      : typeof body.siteId === 'string'
+        ? body.siteId
+        : null;
+  const siteId = siteIdRaw && siteIdRaw.length > 0 ? siteIdRaw : null;
+
   try {
     const admin = createAdminClient();
     const { data: resort } = await admin.from('resorts').select('id').eq('slug', slug).maybeSingle();
@@ -42,8 +74,6 @@ export async function POST(request: Request) {
     if (!map || map.resort_id !== resort.id || !map.is_published) {
       return NextResponse.json({ error: 'not_found' }, { status: 404, headers: CORS_JSON_HEADERS });
     }
-    const siteId =
-      typeof body.siteId === 'string' && body.siteId.length > 0 ? body.siteId : null;
     if (siteId) {
       const { data: site } = await admin.from('sites').select('id').eq('id', siteId).eq('map_id', mapId).maybeSingle();
       if (!site) {

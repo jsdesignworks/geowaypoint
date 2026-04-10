@@ -1,12 +1,15 @@
 'use client';
 
+import Link from 'next/link';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { toggleMapPublished, updateMapGuestSiteDetailMode } from '@/app/actions/maps';
 import { addSite, deleteSites, updateSite } from '@/app/actions/sites';
-import { HSPOT_COLORS } from '@/lib/constants/hspot';
+import { hotspotColorForStatus } from '@/lib/constants/hspot';
 import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { GuestMapPreviewModal } from '@/components/preview/GuestMapPreviewModal';
 
 type MapPayload = {
   id: string;
@@ -14,11 +17,13 @@ type MapPayload = {
   image_url: string | null;
   is_published: boolean | null;
   resort_slug: string;
+  guest_site_detail_mode: 'popup' | 'sidebar';
 };
 
 export type SiteRow = {
   id: string;
   name: string;
+  display_code: string | null;
   site_type: string | null;
   status: string | null;
   rate_night: number | null;
@@ -39,9 +44,11 @@ function numPct(v: number | string | null | undefined, fallback: number) {
 }
 
 export function EditorClient({
+  resortName,
   map,
   initialSites,
 }: {
+  resortName: string;
   map: MapPayload;
   initialSites: SiteRow[];
 }) {
@@ -51,9 +58,14 @@ export function EditorClient({
   const [tab, setTab] = useState<'details' | 'booking' | 'position'>('details');
   const [leftCollapsed, setLeftCollapsed] = useState(false);
   const [rightCollapsed, setRightCollapsed] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [previewPayload, setPreviewPayload] = useState<unknown>(null);
+  const [previewModalOpen, setPreviewModalOpen] = useState(false);
+  const [published, setPublished] = useState(!!map.is_published);
+  const [guestDetailMode, setGuestDetailMode] = useState<'popup' | 'sidebar'>(map.guest_site_detail_mode);
+  const [siteSearch, setSiteSearch] = useState('');
+  const [placeMode, setPlaceMode] = useState(false);
+  const [canvasScale, setCanvasScale] = useState(1);
   const stageRef = useRef<HTMLDivElement>(null);
+  const canvasWrapRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{ id: string; startX: number; startY: number; ox: number; oy: number } | null>(
     null
   );
@@ -64,12 +76,39 @@ export function EditorClient({
     setSites(initialSites);
   }, [initialSites]);
 
+  useEffect(() => {
+    setPublished(!!map.is_published);
+  }, [map.is_published]);
+
+  useEffect(() => {
+    setGuestDetailMode(map.guest_site_detail_mode);
+  }, [map.guest_site_detail_mode]);
+
   const primary = useMemo(() => {
     if (selected.size !== 1) {
       return null;
     }
     return sites.find((s) => selected.has(s.id)) ?? null;
   }, [selected, sites]);
+
+  const filteredSites = useMemo(() => {
+    const q = siteSearch.trim().toLowerCase();
+    if (!q) {
+      return sites;
+    }
+    return sites.filter(
+      (s) =>
+        s.name.toLowerCase().includes(q) ||
+        (s.site_type ?? '').toLowerCase().includes(q) ||
+        (s.status ?? '').toLowerCase().includes(q)
+    );
+  }, [sites, siteSearch]);
+
+  useEffect(() => {
+    if (primary && rightCollapsed) {
+      setRightCollapsed(false);
+    }
+  }, [primary, rightCollapsed]);
 
   const refresh = useCallback(() => {
     router.refresh();
@@ -78,6 +117,21 @@ export function EditorClient({
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) {
+        return;
+      }
+      if (e.key === 'Escape') {
+        setPlaceMode(false);
+        return;
+      }
+      const mod = e.metaKey || e.ctrlKey;
+      if (mod && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        toast('Fields save when you leave each field. Use Save & publish when you are ready to go live.', 'info');
+        return;
+      }
+      if (mod && e.key.toLowerCase() === 'z') {
+        e.preventDefault();
+        toast('Undo is not available yet.', 'info');
         return;
       }
       if (e.key === 'Delete' || e.key === 'Backspace') {
@@ -117,6 +171,46 @@ export function EditorClient({
     }
   }
 
+  async function duplicateSite(src: SiteRow) {
+    const res = await addSite(map.id, `${src.name} Copy`);
+    if ('error' in res) {
+      toast(res.error, 'error');
+      return;
+    }
+    if ('site' in res && res.site) {
+      const id = res.site.id as string;
+      await updateSite(id, {
+        pos_x: numPct(src.pos_x, 50),
+        pos_y: numPct(src.pos_y, 50),
+        site_type: src.site_type,
+        status: src.status,
+        rate_night: src.rate_night,
+        max_length_ft: src.max_length_ft,
+        description: src.description,
+        display_code: src.display_code,
+        ownerrez_property_id: src.ownerrez_property_id,
+      });
+      setSites((prev) => [
+        ...prev,
+        {
+          ...(res.site as SiteRow),
+          pos_x: src.pos_x,
+          pos_y: src.pos_y,
+          site_type: src.site_type,
+          status: src.status,
+          rate_night: src.rate_night,
+          max_length_ft: src.max_length_ft,
+          description: src.description,
+          display_code: src.display_code,
+          ownerrez_property_id: src.ownerrez_property_id,
+        },
+      ]);
+      setSelected(new Set([id]));
+    }
+    toast('Duplicated', 'success');
+    refresh();
+  }
+
   async function onAddSite() {
     const res = await addSite(map.id, `Site ${sites.length + 1}`);
     if ('error' in res) {
@@ -131,13 +225,7 @@ export function EditorClient({
     refresh();
   }
 
-  async function onStageDblClick(e: React.MouseEvent<HTMLDivElement>) {
-    if (!stageRef.current) {
-      return;
-    }
-    const rect = stageRef.current.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
+  async function addSiteAtPct(x: number, y: number) {
     const res = await addSite(map.id, `Site ${sites.length + 1}`);
     if ('error' in res) {
       toast(res.error, 'error');
@@ -149,13 +237,37 @@ export function EditorClient({
       setSites((prev) => [...prev, { ...(res.site as SiteRow), pos_x: x, pos_y: y }]);
       setSelected(new Set([id]));
     }
+    setPlaceMode(false);
     refresh();
+  }
+
+  async function onStageDblClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!stageRef.current) {
+      return;
+    }
+    const rect = stageRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    await addSiteAtPct(x, y);
+  }
+
+  function onStageClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!placeMode || !stageRef.current) {
+      return;
+    }
+    if ((e.target as HTMLElement).classList.contains('hspot')) {
+      return;
+    }
+    const rect = stageRef.current.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
+    void addSiteAtPct(x, y);
   }
 
   function onHspotDown(e: React.MouseEvent, id: string) {
     e.stopPropagation();
     e.preventDefault();
-    const additive = e.shiftKey;
+    const additive = e.shiftKey || e.metaKey || e.ctrlKey;
     selectOne(id, additive);
     const s = sites.find((x) => x.id === id);
     if (!s) {
@@ -238,6 +350,11 @@ export function EditorClient({
       patch.description = value ? String(value) : null;
     } else if (field === 'ownerrez_property_id') {
       patch.ownerrez_property_id = value ? String(value) : null;
+    } else if (field === 'photo_url') {
+      patch.photo_url = value ? String(value) : null;
+    } else if (field === 'display_code') {
+      const v = value != null ? String(value).trim().slice(0, 8) : '';
+      patch.display_code = v ? v : null;
     }
     const res = await updateSite(primary.id, patch);
     if ('error' in res) {
@@ -250,60 +367,123 @@ export function EditorClient({
     toast('Saved', 'success');
   }
 
-  async function openPreview() {
-    if (!map.is_published) {
-      toast('Publish the map to preview the guest widget.', 'error');
+  function openGuestPreview() {
+    if (!published) {
+      toast('Publish the map first, then preview the guest experience.', 'error');
       return;
     }
     if (!map.resort_slug) {
-      toast('Resort slug missing.', 'error');
+      toast('Resort slug is missing. Save your resort profile in Settings.', 'error');
       return;
     }
-    const base = typeof window !== 'undefined' ? window.location.origin : '';
-    try {
-      const r = await fetch(`${base}/api/embed/${encodeURIComponent(map.resort_slug)}/${map.id}`);
-      if (!r.ok) {
-        toast('Could not load preview', 'error');
+    setPreviewModalOpen(true);
+  }
+
+  async function saveAndPublish() {
+    if (!map.resort_slug) {
+      toast('Set your resort slug in Settings before publishing.', 'error');
+      return;
+    }
+    if (!published) {
+      const res = await toggleMapPublished(map.id, true);
+      if ('error' in res) {
+        toast(res.error, 'error');
         return;
       }
-      const data = await r.json();
-      setPreviewPayload(data);
-      setPreviewOpen(true);
-    } catch {
-      toast('Could not load preview', 'error');
+      setPublished(true);
+      toast('Map is live and ready to embed', 'success');
+    } else {
+      toast('Map is already live. Site details save as you edit.', 'info');
     }
+    refresh();
+  }
+
+  async function bulkDeleteSelected() {
+    if (selected.size === 0) return;
+    const res = await deleteSites(Array.from(selected));
+    if ('error' in res) {
+      toast(res.error, 'error');
+      return;
+    }
+    setSelected(new Set());
+    toast('Sites removed', 'success');
+    refresh();
   }
 
   return (
-    <>
-      {previewOpen && previewPayload ? (
-        <div
-          className="pm-modal-overlay"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000 }}
-          onMouseDown={() => setPreviewOpen(false)}
+    <div style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+      <GuestMapPreviewModal
+        open={previewModalOpen}
+        onClose={() => setPreviewModalOpen(false)}
+        resortName={resortName}
+        resortSlug={map.resort_slug || null}
+        mapId={published ? map.id : null}
+      />
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+          padding: '10px 16px',
+          borderBottom: '1px solid var(--border)',
+          background: '#fff',
+          flexShrink: 0,
+          flexWrap: 'wrap',
+        }}
+      >
+        <Link href="/maps" className="btn btn-outline" style={{ padding: '6px 12px' }}>
+          ← Maps
+        </Link>
+        <span style={{ color: 'var(--ink3)', fontSize: 13 }}>/</span>
+        <span className="font-serif-heading" style={{ fontSize: '1.1rem' }}>
+          {map.name}
+        </span>
+        <span className={`pill ${published ? 'pill-green' : 'pill-gray'}`} style={{ fontSize: 11 }}>
+          {published ? 'Live' : 'Draft'}
+        </span>
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            fontSize: 12,
+            color: 'var(--ink3)',
+            marginLeft: 4,
+          }}
         >
-          <div
-            className="card"
-            style={{
-              padding: 20,
-              width: 'min(900px, 96vw)',
-              maxHeight: '90vh',
-              overflow: 'auto',
+          Guest detail
+          <select
+            className="rf-input"
+            style={{ padding: '6px 10px', fontSize: 13, minWidth: 120 }}
+            value={guestDetailMode}
+            onChange={(e) => {
+              const v = e.target.value === 'sidebar' ? 'sidebar' : 'popup';
+              setGuestDetailMode(v);
+              void (async () => {
+                const res = await updateMapGuestSiteDetailMode(map.id, v);
+                if ('error' in res) {
+                  toast(res.error, 'error');
+                  setGuestDetailMode(map.guest_site_detail_mode);
+                  return;
+                }
+                toast('Guest layout saved', 'success');
+                refresh();
+              })();
             }}
-            onMouseDown={(e) => e.stopPropagation()}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h2 className="font-serif-heading" style={{ margin: 0 }}>
-                Guest preview
-              </h2>
-              <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-                Close
-              </Button>
-            </div>
-            <GuestPreviewFrame data={previewPayload as GuestEmbedData} />
-          </div>
-        </div>
-      ) : null}
+            <option value="popup">Popup</option>
+            <option value="sidebar">Sidebar</option>
+          </select>
+        </label>
+        <div style={{ flex: 1, minWidth: 8 }} />
+        <Button variant="outline" onClick={() => openGuestPreview()}>
+          Preview
+        </Button>
+        <Button variant="primary" onClick={() => void saveAndPublish()}>
+          Save &amp; publish
+        </Button>
+      </div>
 
       <div className="editor-layout" style={{ flex: 1, minHeight: 0 }}>
         <aside className={`editor-left${leftCollapsed ? ' collapsed' : ''}`}>
@@ -311,42 +491,101 @@ export function EditorClient({
             <>
               <div style={{ padding: 12, borderBottom: '1px solid var(--border)' }}>
                 <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink2)' }}>Sites</div>
-                <Button variant="primary" style={{ width: '100%', marginTop: 8 }} onClick={() => void onAddSite()}>
-                  Add site
-                </Button>
-              </div>
-              <div style={{ overflow: 'auto', flex: 1 }}>
-                {sites.map((s, i) => (
-                  <button
-                    key={s.id}
-                    type="button"
-                    onClick={(e) => selectOne(s.id, e.shiftKey)}
-                    style={{
-                      display: 'block',
-                      width: '100%',
-                      textAlign: 'left',
-                      padding: '10px 12px',
-                      border: 'none',
-                      borderBottom: '1px solid var(--border)',
-                      background: selected.has(s.id) ? 'var(--fog)' : 'transparent',
-                      cursor: 'pointer',
-                      fontFamily: 'var(--font-ui), system-ui, sans-serif',
-                      fontSize: 13,
-                    }}
+                <Input
+                  placeholder="Search sites…"
+                  value={siteSearch}
+                  onChange={(e) => setSiteSearch(e.target.value)}
+                  style={{ marginTop: 8 }}
+                />
+                <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+                  <Button variant="primary" style={{ flex: 1 }} onClick={() => void onAddSite()}>
+                    Add site
+                  </Button>
+                  <Button
+                    variant={placeMode ? 'primary' : 'outline'}
+                    onClick={() => setPlaceMode((p) => !p)}
                   >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        marginRight: 8,
-                        background: HSPOT_COLORS[i % HSPOT_COLORS.length],
-                      }}
-                    />
-                    {s.name}
+                    Place
+                  </Button>
+                </div>
+              </div>
+              {selected.size > 1 ? (
+                <div
+                  style={{
+                    padding: '10px 12px',
+                    borderBottom: '1px solid var(--border)',
+                    background: 'var(--fog)',
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    alignItems: 'center',
+                    gap: 8,
+                    fontSize: 12,
+                  }}
+                >
+                  <span style={{ fontWeight: 600 }}>
+                    {selected.size} sites selected
+                  </span>
+                  <Button variant="outline" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => void bulkDeleteSelected()}>
+                    Remove
+                  </Button>
+                  <button type="button" className="btn btn-outline" style={{ padding: '4px 10px', fontSize: 11 }} onClick={() => setSelected(new Set())}>
+                    Clear
                   </button>
-                ))}
+                </div>
+              ) : null}
+              <div style={{ overflow: 'auto', flex: 1 }}>
+                {filteredSites.map((s, i) => {
+                  const idx = sites.findIndex((x) => x.id === s.id);
+                  return (
+                    <div
+                      key={s.id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        borderBottom: '1px solid var(--border)',
+                        background: selected.has(s.id) ? 'var(--fog)' : 'transparent',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        onClick={(e) => selectOne(s.id, e.shiftKey)}
+                        style={{
+                          flex: 1,
+                          textAlign: 'left',
+                          padding: '10px 12px',
+                          border: 'none',
+                          background: 'transparent',
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-ui), system-ui, sans-serif',
+                          fontSize: 13,
+                        }}
+                      >
+                        <span
+                          style={{
+                            display: 'inline-block',
+                            width: 10,
+                            height: 10,
+                            borderRadius: '50%',
+                            marginRight: 8,
+                            background: hotspotColorForStatus(s.status, idx >= 0 ? idx : i),
+                          }}
+                        />
+                        {s.name}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-outline"
+                        style={{ padding: '4px 8px', fontSize: 11, marginRight: 8 }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void duplicateSite(s);
+                        }}
+                      >
+                        Dup
+                      </button>
+                    </div>
+                  );
+                })}
               </div>
             </>
           ) : null}
@@ -360,24 +599,35 @@ export function EditorClient({
           </button>
         </aside>
 
-        <div className="editor-canvas-wrap">
+        <div
+          ref={canvasWrapRef}
+          className="editor-canvas-wrap"
+          onWheel={(e) => {
+            e.preventDefault();
+            setCanvasScale((prev) =>
+              Math.min(2, Math.max(0.5, prev - e.deltaY * 0.0015))
+            );
+          }}
+        >
           <div style={{ padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-            <Button variant="outline" onClick={() => void openPreview()}>
-              Preview guest view
-            </Button>
             <span style={{ fontSize: 12, color: 'var(--ink3)' }}>
-              Shift+click multi-select · Delete removes · Double-click map to add
+              Wheel zoom · Shift/Cmd/Ctrl+click multi-select · Place mode · Esc cancels place · Del removes selection
             </span>
           </div>
-          <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
+          <div style={{ padding: 16, display: 'flex', justifyContent: 'center', overflow: 'auto' }}>
             <div
               ref={stageRef}
               className="map-stage"
-              style={{ cursor: 'crosshair' }}
+              style={{
+                cursor: placeMode ? 'crosshair' : 'default',
+                transform: `scale(${canvasScale})`,
+                transformOrigin: 'top center',
+              }}
+              onClick={(e) => void onStageClick(e)}
               onDoubleClick={(e) => void onStageDblClick(e)}
               onMouseDown={(e) => {
                 if (e.target === e.currentTarget || (e.target as HTMLElement).tagName === 'IMG') {
-                  if (!e.shiftKey) {
+                  if (!e.shiftKey && !placeMode) {
                     setSelected(new Set());
                   }
                 }
@@ -409,7 +659,7 @@ export function EditorClient({
                   style={{
                     left: `${numPct(s.pos_x, 50)}%`,
                     top: `${numPct(s.pos_y, 50)}%`,
-                    background: HSPOT_COLORS[i % HSPOT_COLORS.length],
+                    background: hotspotColorForStatus(s.status, i),
                   }}
                   onMouseDown={(e) => onHspotDown(e, s.id)}
                 />
@@ -455,6 +705,24 @@ export function EditorClient({
                       key={primary.id + 'name'}
                       onBlur={(e) => void savePrimaryField('name', e.target.value)}
                     />
+                    <label style={{ fontSize: 11, fontWeight: 600 }}>Map label</label>
+                    <Input
+                      defaultValue={primary.display_code ?? ''}
+                      key={primary.id + 'dcode'}
+                      placeholder="e.g. A1, B2"
+                      maxLength={8}
+                      onBlur={(e) => void savePrimaryField('display_code', e.target.value || null)}
+                    />
+                    <p style={{ fontSize: 11, color: 'var(--ink3)', margin: 0 }}>
+                      Shown on the guest map. Leave blank to auto-generate from the name.
+                    </p>
+                    <label style={{ fontSize: 11, fontWeight: 600 }}>Photo URL</label>
+                    <Input
+                      defaultValue={primary.photo_url ?? ''}
+                      key={primary.id + 'photo'}
+                      placeholder="https://…"
+                      onBlur={(e) => void savePrimaryField('photo_url', e.target.value || null)}
+                    />
                     <label style={{ fontSize: 11, fontWeight: 600 }}>Type</label>
                     <Input
                       defaultValue={primary.site_type ?? ''}
@@ -463,12 +731,27 @@ export function EditorClient({
                       onBlur={(e) => void savePrimaryField('site_type', e.target.value || null)}
                     />
                     <label style={{ fontSize: 11, fontWeight: 600 }}>Status</label>
-                    <Input
-                      defaultValue={primary.status ?? ''}
-                      key={primary.id + 'st'}
-                      placeholder="available"
-                      onBlur={(e) => void savePrimaryField('status', e.target.value || null)}
-                    />
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {(['available', 'occupied', 'reserved', 'maintenance'] as const).map((st) => (
+                        <button
+                          key={st}
+                          type="button"
+                          data-status={st}
+                          className="btn btn-outline"
+                          style={{
+                            padding: '6px 10px',
+                            fontSize: 12,
+                            borderColor:
+                              (primary.status ?? 'available').toLowerCase() === st
+                                ? 'var(--leaf)'
+                                : undefined,
+                          }}
+                          onClick={() => void savePrimaryField('status', st)}
+                        >
+                          {st}
+                        </button>
+                      ))}
+                    </div>
                     <label style={{ fontSize: 11, fontWeight: 600 }}>Nightly rate</label>
                     <Input
                       type="number"
@@ -496,7 +779,7 @@ export function EditorClient({
                 ) : tab === 'booking' ? (
                   <div style={{ display: 'grid', gap: 12 }}>
                     <p style={{ fontSize: 13, color: 'var(--ink3)', margin: 0 }}>
-                      Map to an OwnerRez property (spec §15).
+                      Link this site to an OwnerRez property for synced availability and booking handoff.
                     </p>
                     <label style={{ fontSize: 11, fontWeight: 600 }}>OwnerRez property ID</label>
                     <Input
@@ -526,61 +809,6 @@ export function EditorClient({
           </button>
         </div>
       </div>
-    </>
-  );
-}
-
-type GuestEmbedData = {
-  map: { id: string; name: string; image_url: string | null };
-  sites: SiteRow[];
-};
-
-function GuestPreviewFrame({ data }: { data: GuestEmbedData }) {
-  const { map: m, sites: ss } = data;
-  const [pop, setPop] = useState<SiteRow | null>(null);
-  return (
-    <div style={{ marginTop: 16 }}>
-      <div className="map-stage" style={{ maxWidth: '100%' }}>
-        {m.image_url ? (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img src={m.image_url} alt="" style={{ display: 'block', maxWidth: '100%', height: 'auto' }} />
-        ) : null}
-        {ss.map((s, i) => (
-          <button
-            key={s.id}
-            type="button"
-            className="hspot"
-            style={{
-              left: `${numPct(s.pos_x, 50)}%`,
-              top: `${numPct(s.pos_y, 50)}%`,
-              background: HSPOT_COLORS[i % HSPOT_COLORS.length],
-              cursor: 'pointer',
-              border: 'none',
-              padding: 0,
-            }}
-            aria-label={s.name}
-            onClick={() => setPop(s)}
-          />
-        ))}
-      </div>
-      {pop ? (
-        <div
-          className="card"
-          style={{
-            marginTop: 16,
-            padding: 16,
-            maxWidth: 360,
-            border: '1px solid var(--border)',
-          }}
-        >
-          <div className="font-serif-heading">{pop.name}</div>
-          {pop.rate_night != null ? <div>${Number(pop.rate_night)}/night</div> : null}
-          {pop.description ? <p style={{ fontSize: 14 }}>{pop.description}</p> : null}
-          <Button variant="primary" style={{ marginTop: 8 }} onClick={() => setPop(null)}>
-            Close
-          </Button>
-        </div>
-      ) : null}
     </div>
   );
 }

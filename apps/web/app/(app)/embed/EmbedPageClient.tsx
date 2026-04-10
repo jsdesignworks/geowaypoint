@@ -3,17 +3,27 @@
 import { useState } from 'react';
 import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
+import { OwnerRezConnectModal } from '@/components/ownerrez/OwnerRezConnectModal';
+
+type SiteMapRow = {
+  id: string;
+  name: string;
+  ownerrez_property_id: string | null;
+};
 
 export function EmbedPageClient({
   snippet,
   publicBase,
-  webhookStatus,
+  ownerRezConnected,
+  siteMappings,
 }: {
   snippet: string;
   publicBase: string;
-  webhookStatus: string;
+  ownerRezConnected: boolean;
+  siteMappings: SiteMapRow[];
 }) {
   const [copied, setCopied] = useState(false);
+  const [orOpen, setOrOpen] = useState(false);
 
   async function copy() {
     try {
@@ -28,59 +38,132 @@ export function EmbedPageClient({
 
   return (
     <div style={{ display: 'grid', gap: 24 }}>
-      <p style={{ color: 'var(--ink3)', margin: 0 }}>
-        Public embed resolution: <code>GET {publicBase}/api/embed/[slug]/[mapId]</code> returns JSON for published
-        maps only; <code>403</code> if unpublished, <code>404</code> if unknown (spec §11).
-      </p>
+      <OwnerRezConnectModal open={orOpen} onClose={() => setOrOpen(false)} />
 
       <section className="card" style={{ padding: 20 }}>
         <h2 className="font-serif-heading" style={{ marginTop: 0, fontSize: '1.15rem' }}>
           Install snippet
         </h2>
-        <p style={{ fontSize: 13, color: 'var(--ink3)' }}>
-          Host <code>embed.min.js</code> on Cloudflare Pages (or your CDN). Set <code>data-api-base</code> to this
-          app origin if the script is served from another domain.
+        <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 0 }}>
+          Paste this on any page where you want the map. Host <code className="gw-code">embed.min.js</code> on
+          your CDN; set <code className="gw-code">data-api-base</code> to{' '}
+          <code className="gw-code">{publicBase}</code> when the script loads from another domain.
         </p>
-        <pre
-          style={{
-            padding: 16,
-            fontSize: 12,
-            fontFamily: 'ui-monospace, monospace',
-            overflow: 'auto',
-            background: 'var(--fog)',
-            borderRadius: 'var(--r8)',
-          }}
-        >
+        <pre className="gw-code-block gw-code" style={{ marginTop: 12 }}>
           {snippet}
         </pre>
-        <Button variant="primary" onClick={() => void copy()}>
-          {copied ? 'Copied' : 'Copy snippet'}
-        </Button>
-      </section>
-
-      <section className="card" style={{ padding: 20 }} id="webhooks">
-        <h2 className="font-serif-heading" style={{ marginTop: 0, fontSize: '1.15rem' }}>
-          Webhook health
-        </h2>
-        <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 0 }}>
-          OwnerRez webhook endpoint status (stub until Edge Function is deployed).
-        </p>
-        <div className="pill pill-gray" style={{ display: 'inline-block', marginTop: 8 }}>
-          {webhookStatus}
+        <div style={{ display: 'flex', gap: 10, marginTop: 14, flexWrap: 'wrap' }}>
+          <Button variant="primary" onClick={() => void copy()}>
+            {copied ? 'Copied' : 'Copy'}
+          </Button>
         </div>
       </section>
 
       <section className="card" style={{ padding: 20 }} id="ownerrez-connect">
         <h2 className="font-serif-heading" style={{ marginTop: 0, fontSize: '1.15rem' }}>
-          OwnerRez connect
+          OwnerRez integration
+        </h2>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+          <span
+            style={{
+              width: 10,
+              height: 10,
+              borderRadius: '50%',
+              background: ownerRezConnected ? 'var(--canopy)' : 'var(--amber)',
+            }}
+          />
+          <span style={{ fontSize: 14, fontWeight: 600 }}>
+            {ownerRezConnected ? 'Connected' : 'Not connected'}
+          </span>
+        </div>
+        <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 0 }}>
+          Connect OwnerRez to sync property availability and drive booking quotes from the guest map. Webhook
+          delivery history is under <strong>Settings → OwnerRez</strong>.
+        </p>
+        <Button variant="primary" style={{ marginTop: 12 }} onClick={() => setOrOpen(true)}>
+          {ownerRezConnected ? 'Manage connection' : 'Connect OwnerRez'}
+        </Button>
+
+        <h3 className="font-serif-heading" style={{ fontSize: '1rem', marginTop: 24, marginBottom: 8 }}>
+          What syncs
+        </h3>
+        <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 0 }}>
+          Site status and booking links can reflect OwnerRez when properties are mapped below.
+        </p>
+
+        <h3 className="font-serif-heading" style={{ fontSize: '1rem', marginTop: 20, marginBottom: 8 }}>
+          Property mapping
+        </h3>
+        <div style={{ overflowX: 'auto' }}>
+          <table style={{ width: '100%', fontSize: 13, borderCollapse: 'collapse' }}>
+            <thead>
+              <tr style={{ textAlign: 'left', borderBottom: '1px solid var(--border)' }}>
+                <th style={{ padding: 8 }}>GeoWaypoint site</th>
+                <th style={{ padding: 8 }}>OwnerRez property</th>
+                <th style={{ padding: 8 }}>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {siteMappings.length === 0 ? (
+                <tr>
+                  <td colSpan={3} style={{ padding: 12, color: 'var(--ink3)' }}>
+                    No sites yet. Add sites in the map editor, then map OwnerRez property IDs in site details.
+                  </td>
+                </tr>
+              ) : (
+                siteMappings.map((s) => (
+                  <tr key={s.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                    <td style={{ padding: 8 }}>{s.name}</td>
+                    <td style={{ padding: 8 }}>
+                      <code className="gw-code">{s.ownerrez_property_id ?? '—'}</code>
+                    </td>
+                    <td style={{ padding: 8 }}>
+                      <span className={`pill ${s.ownerrez_property_id ? 'pill-green' : 'pill-amber'}`}>
+                        {s.ownerrez_property_id ? 'Mapped' : 'Map'}
+                      </span>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        <Button variant="outline" style={{ marginTop: 12 }} disabled>
+          Sync properties from OwnerRez
+        </Button>
+      </section>
+
+      <section className="card" style={{ padding: 20 }}>
+        <h2 className="font-serif-heading" style={{ marginTop: 0, fontSize: '1.15rem' }}>
+          GeoWaypoint API key
         </h2>
         <p style={{ fontSize: 13, color: 'var(--ink3)', marginTop: 0 }}>
-          OAuth + token storage in <code>ownerrez_tokens</code> (spec §15) — wire the Edge Function callback URL
-          here when ready.
+          Use for server-to-server calls. Rotate if exposed.
         </p>
-        <Button variant="outline" disabled>
-          Connect OwnerRez (coming soon)
-        </Button>
+        <pre
+          className="gw-code"
+          style={{
+            padding: 12,
+            background: 'var(--fog)',
+            borderRadius: 8,
+            wordBreak: 'break-all',
+            border: '1px solid var(--border)',
+          }}
+        >
+          {`gw_live_sk_${'•'.repeat(24)}`}
+        </pre>
+        <div style={{ display: 'flex', gap: 10, marginTop: 12, flexWrap: 'wrap' }}>
+          <Button variant="outline" disabled>
+            Copy key
+          </Button>
+          <Button variant="outline" disabled>
+            Rotate
+          </Button>
+        </div>
+        <p style={{ fontSize: 12, color: 'var(--ink3)', marginTop: 16, marginBottom: 0 }}>
+          OAuth for OwnerRez uses your app registration in OwnerRez developer settings; complete the connection
+          wizard above to authorize GeoWaypoint.
+        </p>
       </section>
     </div>
   );

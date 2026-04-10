@@ -6,5 +6,15 @@ export default async function ProfilePage() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  return <ProfileClient email={user?.email ?? ''} />;
+  const meta = user?.user_metadata as { full_name?: string } | undefined;
+  const { data: resort } = user
+    ? await supabase.from('resorts').select('name').eq('owner_id', user.id).maybeSingle()
+    : { data: null };
+  return (
+    <ProfileClient
+      email={user?.email ?? ''}
+      initialFullName={meta?.full_name ?? ''}
+      resortName={resort?.name ?? null}
+    />
+  );
 }
