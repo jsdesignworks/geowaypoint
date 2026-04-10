@@ -1,0 +1,11 @@
+{
+  "name": "@geowaypoint/api",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Edge Functions are implemented under supabase/functions and documented under apps/api/functions (see ADR-0001).",
+  "scripts": {
+    "lint": "echo \"No Node lint for Deno Edge Functions\"",
+    "typecheck": "echo \"Use Supabase CLI + Deno for Edge Functions\"",
+    "test": "echo \"No tests yet\""
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "@geowaypoint/embed",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node ./scripts/build.mjs",
+    "lint": "echo \"embed: no eslint yet\"",
+    "typecheck": "echo \"embed: vanilla JS\"",
+    "test": "echo \"No tests yet\""
+  },
+  "devDependencies": {
+    "esbuild": "^0.25.0"
+  }
+}
