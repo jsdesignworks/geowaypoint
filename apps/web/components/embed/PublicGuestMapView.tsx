@@ -1,8 +1,11 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { hotspotColorForStatus, STATUS_HOTSPOT_COLORS } from '@/lib/constants/hspot';
+import { defaultStayDates } from '@/lib/embed/defaultStayDates';
 import { siteDisplayCode } from '@/lib/embed/siteDisplayCode';
+import { getGuestEmbedSessionId, nextGuestEmbedClientSeq } from '@/lib/embed/guestEmbedSession';
+import { toast } from '@/lib/toast';
 
 export type PublicGuestSite = {
   id: string;
@@ -85,20 +88,46 @@ export function PublicGuestMapView({
   const [compareMode, setCompareMode] = useState(false);
   const [compareIds, setCompareIds] = useState<string[]>([]);
   const [compareExpanded, setCompareExpanded] = useState(false);
+  const [bookingSiteId, setBookingSiteId] = useState<string | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
 
+  const emitGuestEvent = useCallback(
+    (event: string, site_id: string | null) => {
+      const session_id = getGuestEmbedSessionId(resort.slug, m.id);
+      const client_seq = nextGuestEmbedClientSeq(resort.slug, m.id);
+      void fetch('/api/v1/events', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event,
+          resort_slug: resort.slug,
+          map_id: m.id,
+          site_id,
+          session_id,
+          client_seq,
+        }),
+      }).catch(() => {});
+    },
+    [resort.slug, m.id]
+  );
+
   useEffect(() => {
-    void fetch('/api/v1/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'map_view',
-        resort_slug: resort.slug,
-        map_id: m.id,
-        site_id: null,
-      }),
-    }).catch(() => {});
-  }, [resort.slug, m.id]);
+    emitGuestEvent('map_view', null);
+  }, [emitGuestEvent]);
+
+  useEffect(() => {
+    if (!compareExpanded) {
+      return;
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setCompareExpanded(false);
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [compareExpanded]);
 
   const active = useMemo(() => Object.values(filters).some(Boolean), [filters]);
 
@@ -133,16 +162,7 @@ export function PublicGuestMapView({
       left: Math.min(e.clientX - r.left + 10, r.width - 220),
       top: Math.min(e.clientY - r.top + 10, r.height - 40),
     });
-    void fetch('/api/v1/events', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        event: 'marker_click',
-        resort_slug: resort.slug,
-        map_id: m.id,
-        site_id: s.id,
-      }),
-    }).catch(() => {});
+    emitGuestEvent('marker_click', s.id);
   }
 
   function toggleCompareId(id: string) {
@@ -170,20 +190,48 @@ export function PublicGuestMapView({
     if (detailMode === 'sidebar') {
       closePopup();
       setSidebarSite(s);
-      void fetch('/api/v1/events', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          event: 'marker_click',
-          resort_slug: resort.slug,
-          map_id: m.id,
-          site_id: s.id,
-        }),
-      }).catch(() => {});
+      emitGuestEvent('marker_click', s.id);
       return;
     }
     openFloatingPopup(e, s);
   }
+
+  const bookThisSite = useCallback(
+    async (site: PublicGuestSite) => {
+      setBookingSiteId(site.id);
+      try {
+        emitGuestEvent('book_click', site.id);
+
+        const dates = defaultStayDates();
+        const res = await fetch('/api/quotes', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            resort_slug: resort.slug,
+            map_id: m.id,
+            site_id: site.id,
+            PropertyId: site.ownerrez_property_id,
+            Arrival: dates.Arrival,
+            Departure: dates.Departure,
+            Adults: 2,
+            Children: 0,
+            Pets: 0,
+          }),
+        });
+        const j = (await res.json()) as { paymentUrl?: string | null; message?: string };
+        if (j.paymentUrl) {
+          window.location.href = j.paymentUrl;
+          return;
+        }
+        toast(j.message ?? 'Booking is not available yet.', 'error');
+      } catch {
+        toast('Booking request failed.', 'error');
+      } finally {
+        setBookingSiteId(null);
+      }
+    },
+    [m.id, resort.slug, emitGuestEvent]
+  );
 
   const rootStyle =
     layout === 'embedded'
@@ -208,6 +256,7 @@ export function PublicGuestMapView({
     const tags = amenityTags(site.description);
     const prose = proseDescription(site.description, tags.length > 0);
     const st = (site.status ?? 'available').toLowerCase();
+    const booking = bookingSiteId === site.id;
     return (
       <>
         <div className="gw-site-popup-head">
@@ -257,11 +306,13 @@ export function PublicGuestMapView({
         ) : null}
         {prose ? <p className="gw-site-popup-desc">{prose}</p> : null}
         <div className="gw-site-popup-actions">
-          <button type="button" className="btn btn-primary gw-site-popup-book">
-            Book this site
-          </button>
-          <button type="button" className="btn btn-outline gw-site-popup-secondary">
-            View full details
+          <button
+            type="button"
+            className="btn btn-primary gw-site-popup-book"
+            disabled={booking}
+            onClick={() => void bookThisSite(site)}
+          >
+            {booking ? 'Booking…' : 'Book this site'}
           </button>
         </div>
       </>
@@ -426,7 +477,14 @@ export function PublicGuestMapView({
             >
               Clear
             </button>
-            <button type="button" className="btn btn-primary" onClick={() => setCompareExpanded((x) => !x)}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              id="gw-guest-compare-toggle"
+              aria-expanded={compareExpanded}
+              aria-controls="gw-guest-compare-panel"
+              onClick={() => setCompareExpanded((x) => !x)}
+            >
               {compareExpanded ? 'Hide compare' : 'Compare'}
             </button>
           </div>
@@ -434,7 +492,12 @@ export function PublicGuestMapView({
       ) : null}
 
       {compareExpanded && compareSites.length > 0 ? (
-        <div className="gw-embed-compare-panel" role="region" aria-label="Side by side comparison">
+        <div
+          id="gw-guest-compare-panel"
+          className="gw-embed-compare-panel"
+          role="region"
+          aria-label="Side by side comparison"
+        >
           <div className="gw-embed-compare-grid">
             {compareSites.map((s) => {
               const i = ss.findIndex((x) => x.id === s.id);

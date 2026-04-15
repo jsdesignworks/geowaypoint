@@ -11,6 +11,55 @@ export type EmbedResolveError =
 
 export type GuestSiteDetailMode = 'popup' | 'sidebar';
 
+type MapRowForEmbed = {
+  id: string;
+  name: string;
+  image_url: string | null;
+  is_published: boolean | null;
+  resort_id: string;
+  guest_site_detail_mode?: string | null;
+};
+
+function isMissingGuestDetailColumnError(message: string | undefined): boolean {
+  if (!message) return false;
+  const m = message.toLowerCase();
+  return (
+    m.includes('guest_site_detail_mode') &&
+    (m.includes('does not exist') || m.includes('schema cache') || m.includes('could not find'))
+  );
+}
+
+async function loadMapRowForEmbed(
+  admin: ReturnType<typeof createAdminClient>,
+  mapId: string
+): Promise<MapRowForEmbed | null> {
+  const full = await admin
+    .from('maps')
+    .select('id, name, image_url, is_published, resort_id, guest_site_detail_mode')
+    .eq('id', mapId)
+    .maybeSingle();
+
+  if (!full.error && full.data) {
+    return full.data as MapRowForEmbed;
+  }
+
+  if (full.error && isMissingGuestDetailColumnError(full.error.message)) {
+    const fallback = await admin
+      .from('maps')
+      .select('id, name, image_url, is_published, resort_id')
+      .eq('id', mapId)
+      .maybeSingle();
+    if (!fallback.error && fallback.data) {
+      return {
+        ...(fallback.data as Omit<MapRowForEmbed, 'guest_site_detail_mode'>),
+        guest_site_detail_mode: 'popup',
+      };
+    }
+  }
+
+  return null;
+}
+
 export type EmbedResolveOk = {
   status: 200;
   body: {
@@ -51,11 +100,7 @@ export async function resolvePublishedMapForEmbed(
     return { status: 402, body: { error: 'subscription_required' } };
   }
 
-  const { data: map } = await admin
-    .from('maps')
-    .select('id, name, image_url, is_published, resort_id, guest_site_detail_mode')
-    .eq('id', mapId)
-    .maybeSingle();
+  const map = await loadMapRowForEmbed(admin, mapId);
 
   if (!map || map.resort_id !== resort.id) {
     return { status: 404, body: { error: 'not_found' } };
@@ -72,10 +117,7 @@ export async function resolvePublishedMapForEmbed(
     )
     .eq('map_id', map.id);
 
-  const mode =
-    (map as { guest_site_detail_mode?: string | null }).guest_site_detail_mode === 'sidebar'
-      ? 'sidebar'
-      : 'popup';
+  const mode = map.guest_site_detail_mode === 'sidebar' ? 'sidebar' : 'popup';
 
   return {
     status: 200,

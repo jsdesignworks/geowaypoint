@@ -85,7 +85,7 @@ export async function POST(request: Request) {
       {
         paymentUrl: null,
         message:
-          'OwnerRez is not connected for this resort. Complete OAuth in Settings → OwnerRez (spec §15).',
+          'OwnerRez is not connected for this resort. Complete OAuth in Settings → Integrations (spec §15).',
       },
       { headers: CORS_JSON_HEADERS }
     );

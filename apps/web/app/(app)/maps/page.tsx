@@ -11,7 +11,7 @@ export default async function MapsPage() {
   }
   const { data: resort } = await supabase
     .from('resorts')
-    .select('id, plan')
+    .select('id, plan, slug, name')
     .eq('owner_id', user.id)
     .single();
   if (!resort) {
@@ -34,6 +34,8 @@ export default async function MapsPage() {
   return (
     <MapsClient
       resortId={resort.id}
+      resortSlug={resort.slug}
+      resortName={resort.name}
       initialMaps={maps ?? []}
       siteCounts={siteCounts}
       plan={resort.plan ?? 'starter'}

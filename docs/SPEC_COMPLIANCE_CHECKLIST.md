@@ -11,16 +11,16 @@ Legend: done / partial / missing
 | 3 | Design system | done | — | — | — | tokens, `.btn`, `.rf-input` |
 | 4 | Schema & RLS | done | — | done | — | core tables + `embed_events`; loyalty cols migration |
 | 5 | Auth & onboarding | partial | partial | — | — | email verify = Supabase default; trial webhook = partial |
-| 6 | App shell | partial | — | — | — | sidebar width vs 220px doc |
-| 7 | Maps CRUD | done | — | — | — | modals inline |
-| 8 | Editor | partial | — | — | — | search/bulk/place/zoom/chips = partial–done |
-| 9 | Guest widget | partial | partial | — | — | filters, quotes payload, preview sheet |
-| 10 | Analytics | partial | partial | done | — | presets, charts, `marker_click` |
+| 6 | App shell | partial | — | — | — | Help nav, profile→Settings link, logout confirm |
+| 7 | Maps CRUD | done | — | — | — | modals inline; list/grid + max-width layout |
+| 8 | Editor | partial | — | — | — | guest_site_detail_mode toolbar; search/bulk/place/zoom/chips = partial–done |
+| 9 | Guest widget | done | partial | — | — | Phase 2: popup/sidebar, compare tray, book→quotes + events; embed header title; preview sheet |
+| 10 | Analytics | partial | partial | done | — | collapsible filters, presets dropdown, DayPicker range, localStorage persist, `session_id`/`client_seq`, sessions UI |
 | 11 | Embed & API admin | partial | partial | — | — | `/embed/...` route, 402, webhook in settings |
-| 12 | Settings 7 panels | partial | partial | partial | — | spec IDs + forms + Portal stub |
-| 13 | Profile | partial | partial | — | partial | avatar/sessions/delete = partial |
+| 12 | Settings 7 panels | partial | partial | partial | — | max-width layout; profile embedded `#sp-user-profile` |
+| 13 | Profile | partial | partial | — | partial | same forms under Settings; `/profile` banner to Settings |
 | 14 | Loyalty | partial | partial | partial | — | `loyalty_tier`, `referred_by`; `/join?ref=` → signup; automation stub |
-| 15 | OwnerRez | partial | partial | done | partial | OAuth/webhook = function stubs + quotes |
+| 15 | OwnerRez | partial | partial | done | partial | Settings OAuth scope notes + modal reminder |
 | 16 | Plan gating | partial | partial | — | — | `UpgradeGateModal`, `gatedServerJson` |
 | 17 | Notifications | partial | partial | partial | — | `notifications` table + bell |
 | 18 | Deployment | partial | partial | — | — | `/api/health`, `/terms`, `/privacy` |

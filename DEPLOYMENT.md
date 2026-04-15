@@ -16,6 +16,13 @@ Use this when moving from local development to production. Adjust hostnames to y
 ## Supabase (production)
 
 - Run all migrations under `geowaypoint/supabase/migrations` against the production project.
+- **Map Editor shows 404 inside the shell:** the route is `/editor/<map-uuid>`. If the URL is `/editor` alone, the app redirects to `/maps`. If the URL includes a UUID and you still see 404, the server query on `public.maps` failed or returned no row—often **missing column** `guest_site_detail_mode` (run migration `20260411120000_maps_guest_site_detail_mode.sql`) or **Vercel env** pointing at a different Supabase project than the one that holds your maps. Verify in SQL (same project as `NEXT_PUBLIC_SUPABASE_URL`):
+
+  ```sql
+  select column_name from information_schema.columns
+  where table_schema = 'public' and table_name = 'maps' and column_name = 'guest_site_detail_mode';
+  ```
+
 - Enable **Row Level Security** policies (already defined in migrations).
 - Create Storage bucket **`maps`** if not created by migration (migration `20260410130000_storage_maps.sql` should define it).
 - Configure **Auth** providers (email, Google) and **Site URL** / redirect URLs.

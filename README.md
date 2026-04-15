@@ -28,9 +28,12 @@ Monorepo for GeoWaypoint (resorts, maps, sites, OwnerRez embed, webhooks, analyt
 
 ```bash
 npm install
-cp apps/web/.env.example apps/web/.env.local
+npm run env:web
+# or: cp apps/web/.env.example apps/web/.env.local
 npm run dev
 ```
+
+`npm run env:web` copies `apps/web/.env.example` to `apps/web/.env.local` only if `.env.local` does not exist (it will not overwrite an existing file).
 
 ## Scripts
 

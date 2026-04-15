@@ -19,7 +19,35 @@ type Body = {
   event?: string;
   siteId?: string | null;
   site_id?: string | null;
+  session_id?: string | null;
+  sessionId?: string | null;
+  client_seq?: number | null;
+  clientSeq?: number | null;
 };
+
+const SESSION_ID_RE = /^[a-zA-Z0-9._:-]{8,80}$/;
+
+function normalizeSessionId(raw: unknown): string | null {
+  if (typeof raw !== 'string') {
+    return null;
+  }
+  const s = raw.trim();
+  if (!s || !SESSION_ID_RE.test(s)) {
+    return null;
+  }
+  return s;
+}
+
+function normalizeClientSeq(raw: unknown): number | null {
+  if (raw === null || raw === undefined) {
+    return null;
+  }
+  const n = typeof raw === 'number' ? raw : parseInt(String(raw), 10);
+  if (!Number.isFinite(n) || n < 0 || n > 1e12) {
+    return null;
+  }
+  return Math.floor(n);
+}
 
 function normalizeEvent(raw: string): string {
   if (raw === 'site_click') {
@@ -60,6 +88,10 @@ export async function POST(request: Request) {
         : null;
   const siteId = siteIdRaw && siteIdRaw.length > 0 ? siteIdRaw : null;
 
+  const sessionId =
+    normalizeSessionId(body.session_id) ?? normalizeSessionId(body.sessionId);
+  const clientSeq = normalizeClientSeq(body.client_seq) ?? normalizeClientSeq(body.clientSeq);
+
   try {
     const admin = createAdminClient();
     const { data: resort } = await admin.from('resorts').select('id').eq('slug', slug).maybeSingle();
@@ -80,12 +112,19 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: 'bad_site' }, { status: 400, headers: CORS_JSON_HEADERS });
       }
     }
-    const { error } = await admin.from('embed_events').insert({
+    const row: Record<string, unknown> = {
       resort_id: resort.id,
       map_id: mapId,
       site_id: siteId,
       event,
-    });
+    };
+    if (sessionId) {
+      row.session_id = sessionId;
+    }
+    if (clientSeq !== null) {
+      row.client_seq = clientSeq;
+    }
+    const { error } = await admin.from('embed_events').insert(row);
     if (error) {
       return NextResponse.json({ error: 'insert_failed' }, { status: 500, headers: CORS_JSON_HEADERS });
     }

@@ -15,6 +15,9 @@ create table if not exists public.notifications (
 
 alter table public.notifications enable row level security;
 
+-- Idempotent: partial applies may have left the table + policy in place.
+drop policy if exists "notifications own rows" on public.notifications;
+
 create policy "notifications own rows" on public.notifications
   for all
   using (auth.uid() = user_id)

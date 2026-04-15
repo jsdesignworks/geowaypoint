@@ -9,6 +9,7 @@ import { createClient } from '@/lib/supabase/client';
 import { toast } from '@/lib/toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { GuestPreviewLauncher } from '@/components/preview/GuestMapPreviewModal';
 
 type MapRow = {
   id: string;
@@ -53,11 +54,15 @@ function MapThumb({ imageUrl }: { imageUrl: string | null }) {
 
 export function MapsClient({
   resortId,
+  resortSlug,
+  resortName,
   initialMaps,
   siteCounts,
   plan,
 }: {
   resortId: string;
+  resortSlug: string;
+  resortName: string;
   initialMaps: MapRow[];
   siteCounts: Record<string, number>;
   plan: string;
@@ -157,7 +162,7 @@ export function MapsClient({
   }
 
   return (
-    <div>
+    <div style={{ width: '100%', maxWidth: 1200, margin: '0 auto' }}>
       <input
         ref={fileRef}
         type="file"
@@ -259,7 +264,7 @@ export function MapsClient({
                 <span className={`pill ${m.is_published ? 'pill-green' : 'pill-gray'}`}>
                   {m.is_published ? 'Published' : 'Draft'}
                 </span>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                   <div style={{ position: 'relative' }}>
                     <button
                       type="button"
@@ -309,6 +314,18 @@ export function MapsClient({
                       </div>
                     ) : null}
                   </div>
+                  <GuestPreviewLauncher
+                    resortSlug={resortSlug}
+                    mapId={m.id}
+                    resortName={resortName}
+                    label="Preview"
+                    variant="compact"
+                    buttonTitle={
+                      m.is_published
+                        ? 'Open guest preview for this map'
+                        : 'Publish this map to load the live guest preview. You can still open the editor.'
+                    }
+                  />
                   <Link href={`/editor/${m.id}`} className="btn btn-outline" style={{ padding: '6px 12px', fontSize: 13 }}>
                     Edit map
                   </Link>

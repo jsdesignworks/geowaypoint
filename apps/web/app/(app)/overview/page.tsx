@@ -143,7 +143,6 @@ export default async function OverviewPage() {
     ? new Date(Math.max(...mapList.map((m) => new Date(m.created_at ?? 0).getTime())))
     : null;
   const liveCount = mapList.filter((m) => m.is_published).length;
-  const firstPublished = mapList.find((m) => m.is_published);
 
   const heroSub =
     liveCount > 0
@@ -166,12 +165,6 @@ export default async function OverviewPage() {
           <Link href="/maps" className="btn-hero btn-hero-primary">
             Open Map Editor
           </Link>
-          <GuestPreviewLauncher
-            resortSlug={resort.slug}
-            mapId={firstPublished?.id ?? null}
-            resortName={resort.name}
-            label="Preview Guest View"
-          />
         </div>
       </div>
 
@@ -208,7 +201,7 @@ export default async function OverviewPage() {
             Webhook health
           </div>
           <div className="stat-num">—</div>
-          <div className="stat-sub">Connect OwnerRez in Settings</div>
+          <div className="stat-sub">Connect OwnerRez in Settings → Integrations</div>
         </div>
       </div>
 
@@ -227,32 +220,48 @@ export default async function OverviewPage() {
               mapList.map((m) => {
                 const nSites = siteByMap.get(m.id) ?? 0;
                 return (
-                  <Link key={m.id} href={`/editor/${m.id}`} className="map-row-mini">
-                    {m.image_url ? (
-                      <Image
-                        src={m.image_url}
-                        alt=""
-                        width={48}
-                        height={36}
-                        className="map-thumb-mini"
-                        unoptimized
-                      />
-                    ) : (
-                      <GradientMapThumb />
-                    )}
-                    <div style={{ minWidth: 0 }}>
-                      <div className="map-row-name">{m.name}</div>
-                      <div className="map-row-meta">
-                        {nSites} site{nSites === 1 ? '' : 's'} · Edited{' '}
-                        {m.created_at ? relativeUpdated(new Date(m.created_at)) : '—'}
+                  <div key={m.id} className="map-row-mini-wrap">
+                    <Link href={`/editor/${m.id}`} className="map-row-mini map-row-mini-main">
+                      {m.image_url ? (
+                        <Image
+                          src={m.image_url}
+                          alt=""
+                          width={48}
+                          height={36}
+                          className="map-thumb-mini"
+                          unoptimized
+                        />
+                      ) : (
+                        <GradientMapThumb />
+                      )}
+                      <div style={{ minWidth: 0, flex: 1 }}>
+                        <div className="map-row-name">{m.name}</div>
+                        <div className="map-row-meta">
+                          {nSites} site{nSites === 1 ? '' : 's'} · Edited{' '}
+                          {m.created_at ? relativeUpdated(new Date(m.created_at)) : '—'}
+                        </div>
                       </div>
+                      <div className="map-row-right">
+                        <span className={`pill ${m.is_published ? 'pill-green' : 'pill-amber'}`}>
+                          {m.is_published ? 'Live' : 'Draft'}
+                        </span>
+                      </div>
+                    </Link>
+                    <div className="map-row-mini-actions">
+                      <GuestPreviewLauncher
+                        resortSlug={resort.slug}
+                        mapId={m.id}
+                        resortName={resort.name}
+                        label="Preview"
+                        variant="compact"
+                        buttonTitle={
+                          m.is_published
+                            ? 'Open guest preview for this map'
+                            : 'Publish this map to load the live guest preview. You can still open the editor.'
+                        }
+                      />
                     </div>
-                    <div className="map-row-right">
-                      <span className={`pill ${m.is_published ? 'pill-green' : 'pill-amber'}`}>
-                        {m.is_published ? 'Live' : 'Draft'}
-                      </span>
-                    </div>
-                  </Link>
+                  </div>
                 );
               })
             )}

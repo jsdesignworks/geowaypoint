@@ -154,18 +154,49 @@ export function GuestPreviewLauncher({
   resortName,
   label,
   className,
+  disabled = false,
+  variant = 'hero',
+  buttonTitle,
 }: {
   resortSlug: string;
   mapId: string | null;
   resortName: string;
   label: string;
   className?: string;
+  /** When true, button does not open preview (e.g. no maps). */
+  disabled?: boolean;
+  /** `hero` = overview CTA; `compact` = map row / card. */
+  variant?: 'hero' | 'compact';
+  /** Native tooltip on the preview button (e.g. draft map hint). */
+  buttonTitle?: string;
 }) {
   const [open, setOpen] = useState(false);
 
+  const defaultClass =
+    variant === 'compact'
+      ? 'btn btn-outline map-row-preview-btn'
+      : 'btn-hero btn-hero-outline';
+
+  const effectiveDisabled = disabled || !mapId;
+
   return (
     <>
-      <button type="button" className={className ?? 'btn-hero btn-hero-outline'} onClick={() => setOpen(true)}>
+      <button
+        type="button"
+        className={className ?? defaultClass}
+        disabled={effectiveDisabled}
+        aria-disabled={effectiveDisabled}
+        title={
+          buttonTitle ??
+          (effectiveDisabled && !mapId ? 'Create a map to preview the guest view.' : undefined)
+        }
+        onClick={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (effectiveDisabled) return;
+          setOpen(true);
+        }}
+      >
         {label}
       </button>
       <GuestMapPreviewModal

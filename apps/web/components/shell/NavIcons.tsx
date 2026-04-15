@@ -46,6 +46,18 @@ export function IconEmbed({ className }: { className?: string }) {
   );
 }
 
+export function IconHelp({ className }: { className?: string }) {
+  return (
+    <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+      <path
+        fill="currentColor"
+        d="M10.2 9.3c0-1 .8-1.8 1.8-1.8s1.8.8 1.8 1.8c0 1.4-1.8 1.5-1.8 3.1h-1.4c0-2 1.8-2.3 1.8-3.1 0-.4-.3-.7-.7-.7s-.7.3-.7.7c0 .3-.2.5-.5.5s-.5-.2-.5-.5zm1.8 6.4a1 1 0 1 1 0 .01v-.01z"
+      />
+    </svg>
+  );
+}
+
 export function IconSettings({ className }: { className?: string }) {
   return (
     <svg className={className} width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>

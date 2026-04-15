@@ -22,6 +22,24 @@
   }
   apiBase = apiBase.replace(/\/$/, '');
 
+  function readAttrOn(el: HTMLElement, name: string, defaultOn = true) {
+    const v = el.getAttribute(name);
+    if (v === null || v === '') {
+      return defaultOn;
+    }
+    const s = v.trim().toLowerCase();
+    if (s === '0' || s === 'false' || s === 'no' || s === 'off') {
+      return false;
+    }
+    return true;
+  }
+
+  const showHeader = readAttrOn(root, 'data-show-header');
+  const showFilters = readAttrOn(root, 'data-show-filters');
+  const showCompare = readAttrOn(root, 'data-show-compare');
+  const showFooter = readAttrOn(root, 'data-show-footer');
+  const showBook = readAttrOn(root, 'data-show-book');
+
   const STATUS_CLASS: Record<string, string> = {
     available: 'wm-avail',
     occupied: 'wm-occ',
@@ -74,7 +92,41 @@
       .slice(0, 12);
   }
 
+  const sessionStorageKey = `gw_embed_sess_v1:${slug}:${mapId}`;
+  const sessionSeqKey = `${sessionStorageKey}:seq`;
+
+  function embedSessionId(): string {
+    try {
+      const existing = sessionStorage.getItem(sessionStorageKey);
+      if (existing && existing.length >= 8 && existing.length <= 80) {
+        return existing;
+      }
+      const id =
+        typeof crypto !== 'undefined' && crypto.randomUUID
+          ? crypto.randomUUID()
+          : `gw_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 12)}`;
+      sessionStorage.setItem(sessionStorageKey, id);
+      return id;
+    } catch {
+      return `gw_${Date.now()}`;
+    }
+  }
+
+  function nextClientSeq(): number {
+    try {
+      const raw = sessionStorage.getItem(sessionSeqKey);
+      const n = raw ? parseInt(raw, 10) : 0;
+      const next = Number.isFinite(n) ? n + 1 : 1;
+      sessionStorage.setItem(sessionSeqKey, String(next));
+      return next;
+    } catch {
+      return Date.now() % 1_000_000_000;
+    }
+  }
+
   function postEvent(event: string, siteId?: string) {
+    const session_id = embedSessionId();
+    const client_seq = nextClientSeq();
     void fetch(`${apiBase}/api/v1/events`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -83,6 +135,8 @@
         resort_slug: slug,
         map_id: mapId,
         site_id: siteId ?? null,
+        session_id,
+        client_seq,
       }),
     }).catch(() => {});
   }
@@ -126,9 +180,24 @@
 
   const header = document.createElement('div');
   header.style.cssText =
-    'display:flex;flex-wrap:wrap;align-items:center;gap:8px;padding:10px 12px;background:#1A4A2A;color:#fff;font:13px system-ui,sans-serif;border-radius:8px 8px 0 0;';
+    'padding:10px 12px;background:#1A4A2A;color:#fff;font:13px system-ui,sans-serif;border-radius:8px 8px 0 0;';
+  const headerInner = document.createElement('div');
+  headerInner.style.cssText =
+    'display:flex;flex-wrap:wrap;align-items:center;gap:12px;width:100%;justify-content:space-between;';
+
+  const resortTitle = document.createElement('h2');
+  resortTitle.style.cssText =
+    'margin:0;font-size:1.05rem;font-weight:600;color:#fff;flex:1 1 140px;min-width:0;line-height:1.25;font-family:Georgia,Times New Roman,serif;';
+  resortTitle.textContent = '';
+  headerInner.appendChild(resortTitle);
+
+  const controls = document.createElement('div');
+  controls.style.cssText =
+    'display:flex;flex-wrap:wrap;align-items:center;gap:8px;flex:2 1 280px;justify-content:flex-end;';
+
   const filters: Record<string, boolean> = {};
   const filterKeys = ['available', 'occupied', 'reserved', 'maintenance'] as const;
+  const filterBtns: HTMLButtonElement[] = [];
   filterKeys.forEach((st) => {
     const btn = document.createElement('button');
     btn.type = 'button';
@@ -145,45 +214,62 @@
       applyFilters();
       updateClear();
     });
-    header.appendChild(btn);
+    filterBtns.push(btn);
+    controls.appendChild(btn);
   });
 
   let compareMode = false;
   const compareBtn = document.createElement('button');
   compareBtn.type = 'button';
   compareBtn.textContent = 'Compare';
+  compareBtn.setAttribute('aria-pressed', 'false');
   compareBtn.style.cssText =
     'border:1px solid rgba(255,255,255,.35);background:transparent;color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit;';
   compareBtn.addEventListener('click', () => {
     compareMode = !compareMode;
     compareBtn.style.background = compareMode ? '#fff' : 'transparent';
     compareBtn.style.color = compareMode ? '#1A4A2A' : '#fff';
+    compareBtn.setAttribute('aria-pressed', compareMode ? 'true' : 'false');
     if (!compareMode) {
       compareIds = [];
       updateCompareUi();
     }
   });
-  header.appendChild(compareBtn);
+  controls.appendChild(compareBtn);
 
   const clearBtn = document.createElement('button');
   clearBtn.type = 'button';
   clearBtn.textContent = '✕ Clear';
   clearBtn.style.cssText =
-    'display:none;margin-left:auto;border:none;background:rgba(255,255,255,.2);color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit;';
+    'display:none;border:none;background:rgba(255,255,255,.2);color:#fff;padding:6px 10px;border-radius:6px;cursor:pointer;font:inherit;';
   clearBtn.addEventListener('click', () => {
     filterKeys.forEach((st) => {
       filters[st] = false;
     });
-    header.querySelectorAll('button').forEach((b, i) => {
-      if (i < filterKeys.length) {
-        (b as HTMLButtonElement).style.background = 'transparent';
-        (b as HTMLButtonElement).style.color = '#fff';
-      }
+    filterBtns.forEach((b) => {
+      b.style.background = 'transparent';
+      b.style.color = '#fff';
     });
     applyFilters();
     updateClear();
   });
-  header.appendChild(clearBtn);
+  controls.appendChild(clearBtn);
+
+  if (!showFilters) {
+    filterBtns.forEach((b) => {
+      b.style.display = 'none';
+    });
+    clearBtn.style.display = 'none';
+  }
+  if (!showCompare) {
+    compareBtn.style.display = 'none';
+  }
+
+  headerInner.appendChild(controls);
+  header.appendChild(headerInner);
+  if (!showHeader) {
+    header.style.display = 'none';
+  }
 
   function anyFilter() {
     return filterKeys.some((st) => filters[st]);
@@ -242,9 +328,15 @@
   compareBar.appendChild(compareBtnWrap);
 
   const comparePanel = document.createElement('div');
+  comparePanel.id = 'gw-embed-compare-panel';
+  comparePanel.setAttribute('role', 'region');
+  comparePanel.setAttribute('aria-label', 'Side by side comparison');
   comparePanel.style.cssText =
     'display:none;padding:12px;background:#fafdf8;border-top:1px solid #d0e4d8;max-height:240px;overflow:auto;font:13px system-ui,sans-serif;';
   let comparePanelOpen = false;
+  compareGoBtn.id = 'gw-embed-compare-toggle';
+  compareGoBtn.setAttribute('aria-controls', 'gw-embed-compare-panel');
+  compareGoBtn.setAttribute('aria-expanded', 'false');
 
   shell.appendChild(mainRow);
   shell.appendChild(compareBar);
@@ -295,6 +387,14 @@
   }
 
   function updateCompareUi() {
+    if (!showCompare) {
+      compareBar.style.display = 'none';
+      comparePanel.style.display = 'none';
+      comparePanel.innerHTML = '';
+      comparePanelOpen = false;
+      compareGoBtn.setAttribute('aria-expanded', 'false');
+      return;
+    }
     const n = compareIds.length;
     compareCountEl.textContent = `${n} site${n === 1 ? '' : 's'} selected`;
     if (n === 0) {
@@ -302,15 +402,30 @@
       comparePanel.style.display = 'none';
       comparePanel.innerHTML = '';
       comparePanelOpen = false;
+      compareGoBtn.setAttribute('aria-expanded', 'false');
       return;
     }
     compareBar.style.display = 'flex';
   }
 
+  function closeComparePanel() {
+    comparePanelOpen = false;
+    comparePanel.style.display = 'none';
+    comparePanel.innerHTML = '';
+    compareGoBtn.textContent = 'Compare';
+    compareGoBtn.setAttribute('aria-expanded', 'false');
+  }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && comparePanelOpen) {
+      e.preventDefault();
+      closeComparePanel();
+    }
+  });
+
   compareClearBtn.addEventListener('click', () => {
     compareIds = [];
-    comparePanelOpen = false;
-    compareGoBtn.textContent = 'Compare';
+    closeComparePanel();
     syncCompareMarkers();
     updateCompareUi();
   });
@@ -319,14 +434,13 @@
     if (compareIds.length === 0) {
       return;
     }
-    comparePanelOpen = !comparePanelOpen;
-    if (!comparePanelOpen) {
-      comparePanel.style.display = 'none';
-      comparePanel.innerHTML = '';
-      compareGoBtn.textContent = 'Compare';
+    if (comparePanelOpen) {
+      closeComparePanel();
       return;
     }
+    comparePanelOpen = true;
     compareGoBtn.textContent = 'Hide compare';
+    compareGoBtn.setAttribute('aria-expanded', 'true');
     const rows = compareIds
       .map((id) => allSites.find((s) => s.id === id))
       .filter((x): x is (typeof allSites)[0] => x != null);
@@ -347,6 +461,11 @@
   });
 
   function updateFooter() {
+    if (!showFooter) {
+      footer.style.display = 'none';
+      return;
+    }
+    footer.style.display = 'flex';
     const total = allSites.length;
     const avail = allSites.filter((s) => (s.status ?? 'available').toLowerCase() === 'available').length;
     footer.innerHTML = `<span>${avail} of ${total} sites available</span><span style="font-size:10px">Powered by GeoWaypoint</span>`;
@@ -374,10 +493,16 @@
       s.rate_night != null
         ? `<div style="display:flex;justify-content:space-between;font-size:13px;margin:6px 0"><span style="color:#888">Nightly rate</span><span>$${Number(s.rate_night)} / night</span></div>`
         : '';
-    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px"><div><div style="font-weight:700;font-size:15px">${escapeHtml(siteMarkerLabel(s, siteIndex))}</div><div style="font-size:13px;color:#444;margin-top:2px">${escapeHtml(s.name)}</div></div><button type="button" class="gw-pop-x" style="border:none;background:transparent;color:#888;font-size:18px;cursor:pointer;line-height:1">×</button></div><div style="display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;padding:4px 8px;border-radius:6px;margin-bottom:8px;background:#e4f3ec;color:#2d6b42">${escapeHtml(st)}</div>${typeRow}${lenRow}${rateRow}${tagHtml}${prose}<button type="button" class="gw-book" style="margin-top:10px;padding:9px 14px;border:none;border-radius:6px;background:#2D6B42;color:#fff;font-weight:700;cursor:pointer;width:100%">Book this site</button>`;
+    const bookBtn = showBook
+      ? `<button type="button" class="gw-book" style="margin-top:10px;padding:9px 14px;border:none;border-radius:6px;background:#2D6B42;color:#fff;font-weight:700;cursor:pointer;width:100%">Book this site</button>`
+      : '';
+    return `<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;margin-bottom:8px"><div><div style="font-weight:700;font-size:15px">${escapeHtml(siteMarkerLabel(s, siteIndex))}</div><div style="font-size:13px;color:#444;margin-top:2px">${escapeHtml(s.name)}</div></div><button type="button" class="gw-pop-x" style="border:none;background:transparent;color:#888;font-size:18px;cursor:pointer;line-height:1">×</button></div><div style="display:inline-block;font-size:10px;font-weight:700;text-transform:uppercase;padding:4px 8px;border-radius:6px;margin-bottom:8px;background:#e4f3ec;color:#2d6b42">${escapeHtml(st)}</div>${typeRow}${lenRow}${rateRow}${tagHtml}${prose}${bookBtn}`;
   }
 
   function wireBook(rootEl: HTMLElement, s: (typeof sitesData)[0]) {
+    if (!showBook) {
+      return;
+    }
     const book = rootEl.querySelector('.gw-book');
     book?.addEventListener('click', () => {
       postEvent('book_click', s.id);
@@ -417,6 +542,7 @@
         return;
       }
       const data = (await r.json()) as {
+        resort?: { name?: string; slug?: string };
         map: {
           image_url: string | null;
           name: string;
@@ -424,6 +550,7 @@
         };
         sites: typeof sitesData;
       };
+      resortTitle.textContent = (data.resort && data.resort.name) || data.map.name || '';
       postEvent('map_view');
       allSites = data.sites;
       sitesData = data.sites;
@@ -462,7 +589,7 @@
         dot.addEventListener('click', (ev) => {
           ev.stopPropagation();
           const e = ev as MouseEvent;
-          if (compareMode || e.shiftKey) {
+          if (showCompare && (compareMode || e.shiftKey)) {
             let next = compareIds.filter((id) => id !== s.id);
             if (next.length === compareIds.length) {
               if (compareIds.length >= MAX_COMPARE) {

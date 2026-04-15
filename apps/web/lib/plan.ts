@@ -87,6 +87,11 @@ export function planAllowsWhiteLabelEmbed(plan: string | null | undefined) {
   return norm(plan) === 'enterprise';
 }
 
+/** Advanced widget theme / button styling in Settings — Starter excluded. */
+export function planAllowsWidgetAdvanced(plan: string | null | undefined) {
+  return norm(plan) !== 'starter';
+}
+
 /**
  * Paid tiers should have an active Stripe subscription id on the resort.
  * Used for public embed 402 (subscription_required).

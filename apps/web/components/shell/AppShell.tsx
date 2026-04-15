@@ -8,9 +8,9 @@ import {
   IconAnalytics,
   IconChevron,
   IconEmbed,
+  IconHelp,
   IconMaps,
   IconOverview,
-  IconProfile,
   IconSettings,
 } from '@/components/shell/NavIcons';
 import { GeoWaypointMark } from '@/components/shell/GeoWaypointMark';
@@ -39,12 +39,10 @@ const navMain: NavItem[] = [
   { href: '/maps', label: 'Maps', dataLabel: 'Maps', Icon: IconMaps },
   { href: '/analytics', label: 'Analytics', dataLabel: 'Analytics', Icon: IconAnalytics },
   { href: '/embed', label: 'Embed & API', dataLabel: 'Embed & API', Icon: IconEmbed },
+  { href: '/help', label: 'Help', dataLabel: 'Help', Icon: IconHelp },
 ];
 
-const navAccount: NavItem[] = [
-  { href: '/settings', label: 'Settings', dataLabel: 'Settings', Icon: IconSettings },
-  { href: '/profile', label: 'My Profile', dataLabel: 'My Profile', Icon: IconProfile },
-];
+const navAccount: NavItem[] = [{ href: '/settings', label: 'Settings', dataLabel: 'Settings', Icon: IconSettings }];
 
 /** Staging-style subtitles under top bar title */
 function topbarSubtitle(pathname: string): string | null {
@@ -59,6 +57,9 @@ function topbarSubtitle(pathname: string): string | null {
   }
   if (pathname === '/settings') {
     return 'Configure your resort, subscription, and account';
+  }
+  if (pathname === '/help' || pathname.startsWith('/help/')) {
+    return 'Guides for embed, maps, billing, and your account';
   }
   if (pathname === '/profile') {
     return 'Your personal account details and preferences';
@@ -119,6 +120,7 @@ export function AppShell({
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const tooltipRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -141,7 +143,8 @@ export function AppShell({
 
   const showTooltip = useCallback((el: HTMLElement, text: string) => {
     const tip = tooltipRef.current;
-    if (!tip || !collapsed) return;
+    if (!tip) return;
+    if (!collapsed && !el.classList.contains('sidebar-chevron-tab')) return;
     const r = el.getBoundingClientRect();
     tip.textContent = text;
     tip.style.left = `${r.right + 8}px`;
@@ -164,7 +167,7 @@ export function AppShell({
         )
       : null;
 
-  async function signOut() {
+  async function performSignOut() {
     const supabase = createClient();
     await supabase.auth.signOut();
     window.location.href = '/';
@@ -264,39 +267,64 @@ export function AppShell({
               Account
             </div>
             {navAccount.map((item) => renderNavItem(item))}
-            <button
-              type="button"
-              className="nav-item sb-toggle-btn"
-              data-label="Collapse"
-              onMouseEnter={(e) => showTooltip(e.currentTarget, collapsed ? 'Expand' : 'Collapse')}
-              onMouseLeave={hideTooltip}
-              onClick={() => setCollapsedPersist(!collapsed)}
-            >
-              <IconChevron className="nav-icon chevron" />
-              <span className="nav-label">Collapse</span>
-            </button>
           </nav>
           <div className="sidebar-bottom">
-            <div className="sidebar-bottom-detail sidebar-user-row">
-              <div className="sidebar-user-av">{initials}</div>
-              <div style={{ minWidth: 0, flex: 1 }}>
-                <div className="sidebar-user-nm">
-                  {userDisplayName?.trim() || userEmail.split('@')[0] || 'User'}
+            <div
+              className="sidebar-bottom-detail sidebar-user-row"
+              style={{ display: 'flex', alignItems: 'center', gap: 9 }}
+            >
+              <Link
+                href="/settings#sp-user-profile"
+                className="sidebar-user-row-link"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 9,
+                  flex: 1,
+                  minWidth: 0,
+                  textDecoration: 'none',
+                  color: 'inherit',
+                }}
+                title="My profile in Settings"
+              >
+                <div className="sidebar-user-av">{initials}</div>
+                <div style={{ minWidth: 0, flex: 1 }}>
+                  <div className="sidebar-user-nm">
+                    {userDisplayName?.trim() || userEmail.split('@')[0] || 'User'}
+                  </div>
+                  <div className="sidebar-user-em">{userEmail}</div>
                 </div>
-                <div className="sidebar-user-em">{userEmail}</div>
-              </div>
+              </Link>
               <button
                 type="button"
                 className="sidebar-logout-btn"
                 title="Sign out"
                 aria-label="Sign out"
-                onClick={() => void signOut()}
+                onClick={() => setLogoutConfirmOpen(true)}
               >
                 ↩
               </button>
             </div>
           </div>
         </aside>
+        <button
+          type="button"
+          className="sidebar-chevron-tab"
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          title={collapsed ? 'Expand' : 'Collapse'}
+          style={{
+            position: 'absolute',
+            left: collapsed ? 56 : 220,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            zIndex: 60,
+          }}
+          onMouseEnter={(e) => showTooltip(e.currentTarget, collapsed ? 'Expand' : 'Collapse')}
+          onMouseLeave={hideTooltip}
+          onClick={() => setCollapsedPersist(!collapsed)}
+        >
+          <IconChevron className="sidebar-chevron-tab-icon" />
+        </button>
         <div className="app-main">
           {trialDaysLeft !== null && (
             <div className="trial-banner">
@@ -319,6 +347,47 @@ export function AppShell({
           <div className="page-body">{children}</div>
         </div>
       </div>
+      {logoutConfirmOpen ? (
+        <div
+          className="pm-modal-overlay"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(0,0,0,.5)',
+            zIndex: 6000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 20,
+          }}
+          role="presentation"
+          onMouseDown={() => setLogoutConfirmOpen(false)}
+        >
+          <div
+            className="card"
+            style={{ padding: 24, maxWidth: 400, width: '100%' }}
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="gw-logout-title"
+            onMouseDown={(e) => e.stopPropagation()}
+          >
+            <h2 id="gw-logout-title" className="font-serif-heading" style={{ marginTop: 0, fontSize: '1.2rem' }}>
+              Sign out?
+            </h2>
+            <p style={{ fontSize: 14, color: 'var(--ink3)', lineHeight: 1.5, marginBottom: 20 }}>
+              You will need to sign in again to access GeoWaypoint.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <button type="button" className="btn btn-outline" onClick={() => setLogoutConfirmOpen(false)}>
+                Cancel
+              </button>
+              <button type="button" className="btn btn-primary" onClick={() => void performSignOut()}>
+                Sign out
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
       <div id="gwSbTooltip" ref={tooltipRef} />
       <Toaster />
     </>

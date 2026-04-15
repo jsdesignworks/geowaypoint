@@ -2,16 +2,21 @@
 
 import { Button } from '@/components/ui/button';
 
-/** Spec §11 — 4-step OwnerRez connect walkthrough (static; OAuth completes in Edge Function). */
+function callbackUrlHint() {
+  const base = typeof window !== 'undefined' ? window.location.origin : '';
+  return base ? `${base}/api/oauth/ownerrez/callback` : '/api/oauth/ownerrez/callback';
+}
+
+/** OwnerRez OAuth walkthrough; authorization uses `/api/oauth/ownerrez/authorize` per OwnerRez OAuth app docs. */
 export function OwnerRezConnectModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   if (!open) {
     return null;
   }
   const steps = [
-    'Log into OwnerRez at app.ownerrez.com.',
-    'Click “Authorize GeoWaypoint” to start OAuth (redirects to OwnerRez).',
-    'Approve the app — you return to GeoWaypoint with a stored token (Edge Function).',
-    'Map OwnerRez properties to sites in the Map Editor → Booking tab.',
+    'Register an OAuth app in OwnerRez and set the redirect URL to match GeoWaypoint (see below).',
+    'Click “Authorize with OwnerRez” — you will sign in at OwnerRez and approve access.',
+    'After approval, GeoWaypoint stores the access token for quotes and booking handoff.',
+    'Map OwnerRez property IDs on each site in the Map Editor → Booking tab.',
   ];
   return (
     <div
@@ -35,21 +40,36 @@ export function OwnerRezConnectModal({ open, onClose }: { open: boolean; onClose
           ))}
         </ol>
         <p style={{ fontSize: 12, color: 'var(--ink3)' }}>
-          Callback URL for your OAuth app:{' '}
-          <code style={{ wordBreak: 'break-all' }}>https://api.geowaypoint.io/oauth/ownerrez/callback</code> (or your
-          deployed Edge Function URL).
+          <strong>OAuth redirect URL</strong> to register in OwnerRez:{' '}
+          <code style={{ wordBreak: 'break-all' }}>{callbackUrlHint()}</code>
         </p>
-        <div style={{ display: 'flex', gap: 10, marginTop: 16 }}>
+        <p style={{ fontSize: 12, color: 'var(--ink3)', lineHeight: 1.5 }}>
+          Request the <strong>smallest scope set</strong> that still allows property reads and quote checkout for mapped
+          sites — see{' '}
+          <a
+            href="https://www.ownerrez.com/support/articles/api-oauth-app"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: 'var(--sky)', fontWeight: 600 }}
+          >
+            OwnerRez OAuth app
+          </a>{' '}
+          and <strong>Settings → Integrations</strong> for scope notes.
+        </p>
+        <div style={{ display: 'flex', gap: 10, marginTop: 16, flexWrap: 'wrap' }}>
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
+          <a className="btn btn-primary" href="/api/oauth/ownerrez/authorize">
+            Authorize with OwnerRez
+          </a>
           <a
-            className="btn btn-primary"
-            href="https://app.ownerrez.com"
+            className="btn btn-outline"
+            href="https://www.ownerrez.com/support/articles/api-oauth-app"
             target="_blank"
             rel="noopener noreferrer"
           >
-            Open OwnerRez
+            OAuth documentation
           </a>
         </div>
       </div>

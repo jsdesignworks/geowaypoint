@@ -7,6 +7,7 @@
     "packages/*"
   ],
   "scripts": {
+    "env:web": "sh scripts/init-web-env.sh",
     "dev": "npm run dev --workspace=@geowaypoint/web",
     "build": "npm run build --workspace=@geowaypoint/web",
     "lint": "npm run lint --workspaces --if-present",

@@ -11,7 +11,7 @@ export default async function EmbedApiPage() {
   }
   const { data: resort } = await supabase
     .from('resorts')
-    .select('id, slug')
+    .select('id, slug, plan, ownerrez_integration_enabled')
     .eq('owner_id', user.id)
     .single();
 
@@ -38,23 +38,17 @@ export default async function EmbedApiPage() {
   const appOrigin =
     process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, '') || 'https://your-app.vercel.app';
   const cdnOrigin = 'https://cdn.geowaypoint.io/v1';
-  const firstPublished = maps?.find((m) => m.is_published) ?? maps?.[0];
-  const exampleMapId = firstPublished?.id ?? 'YOUR_MAP_UUID';
-
-  const snippet = `<script src="${cdnOrigin}/embed.min.js" defer></script>
-<div id="gw-map"
-     data-resort="${resort?.slug ?? 'your-slug'}"
-     data-map-id="${exampleMapId}"
-     data-api-base="${appOrigin}"
-     style="width:100%;min-height:520px;">
-</div>`;
 
   return (
     <EmbedPageClient
-      snippet={snippet}
+      resortSlug={resort?.slug ?? 'your-slug'}
+      maps={maps ?? []}
       publicBase={appOrigin}
+      cdnOrigin={cdnOrigin}
+      ownerRezIntegrationEnabled={!!resort?.ownerrez_integration_enabled}
       ownerRezConnected={!!orToken}
       siteMappings={sitesList ?? []}
+      plan={resort?.plan ?? 'starter'}
     />
   );
 }
