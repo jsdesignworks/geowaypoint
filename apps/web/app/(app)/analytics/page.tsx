@@ -19,10 +19,10 @@ export default async function AnalyticsPage() {
   }
   const { data: events } = await supabase
     .from('embed_events')
-    .select('id, resort_id, map_id, site_id, event, created_at')
+    .select('id, resort_id, map_id, site_id, event, created_at, session_id, client_seq')
     .eq('resort_id', resort.id)
     .order('created_at', { ascending: false })
-    .limit(8000);
+    .limit(12000);
 
   const { data: maps } = await supabase
     .from('maps')
@@ -31,6 +31,11 @@ export default async function AnalyticsPage() {
     .eq('is_published', true);
 
   return (
-    <AnalyticsClient initialEvents={events ?? []} maps={maps ?? []} plan={resort.plan ?? 'starter'} />
+    <AnalyticsClient
+      initialEvents={events ?? []}
+      maps={maps ?? []}
+      plan={resort.plan ?? 'starter'}
+      resortId={resort.id}
+    />
   );
 }
